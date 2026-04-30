@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { verifyMpesaReceipt, verifyBankReceipt } from '../services/verificationService';
+import { verifyBankReceipt } from '../services/verificationService';
 import { OperationType, AppUser, Tenancy } from '../types';
 import { handleFirestoreError } from '../lib/error-handler';
 import { motion, AnimatePresence } from 'motion/react';
