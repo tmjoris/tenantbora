@@ -1,0 +1,6 @@
+{
+  "name": "TenantBora - Nairobi's Premium Rental Platform",
+  "description": "Nairobi's premium digital verification ecosystem specializing in AI-powered M-Pesa receipt validation, automated rental ledgers, and secure tenant vetting.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

@@ -1,0 +1,131 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the TenantBora system (Landlord or Tenant).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["landlord", "tenant"] },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "employmentDetails": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "role", "email", "createdAt"]
+    },
+    "Property": {
+      "title": "Property",
+      "description": "A rental property listed by a landlord.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "landlordId": { "type": "string" },
+        "name": { "type": "string" },
+        "location": { "type": "string" },
+        "rentAmount": { "type": "number" },
+        "description": { "type": "string" },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "amenities": { "type": "array", "items": { "type": "string" } },
+        "available": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["landlordId", "name", "rentAmount", "available"]
+    },
+    "Application": {
+      "title": "Application",
+      "description": "A tenant's application for a property.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "landlordId": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "message": { "type": "string" },
+        "documents": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "propertyId", "landlordId", "status", "createdAt"]
+    },
+    "Tenancy": {
+      "title": "Tenancy",
+      "description": "An active rental agreement.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "landlordId": { "type": "string" },
+        "startDate": { "type": "string", "format": "date-time" },
+        "rentAmount": { "type": "number" },
+        "rentDueDate": { "type": "number" },
+        "rentStatus": { "type": "string", "enum": ["current", "overdue"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenantId", "propertyId", "landlordId", "startDate", "rentDueDate", "rentStatus", "rentAmount"]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "An invitation sent from a landlord to a tenant.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "landlordId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "unitNumber": { "type": "string" },
+        "tenantEmail": { "type": "string" },
+        "rentAmount": { "type": "number" },
+        "rentDueDate": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["landlordId", "propertyId", "tenantEmail", "rentAmount", "rentDueDate", "status", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "A rent payment record.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenancyId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "mpesaReceipt": { "type": "string" },
+        "status": { "type": "string", "enum": ["completed", "pending"] }
+      },
+      "required": ["tenancyId", "tenantId", "amount", "date", "status"]
+    },
+    "MaintenanceRequest": {
+      "title": "MaintenanceRequest",
+      "description": "A request for repairs or maintenance.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenancyId": { "type": "string" },
+        "tenantId": { "type": "string" },
+        "propertyId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "in-progress", "closed"] },
+        "urgency": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tenancyId", "tenantId", "propertyId", "title", "status", "urgency", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles." },
+    "/properties/{propertyId}": { "schema": "Property", "description": "Property listings." },
+    "/applications/{applicationId}": { "schema": "Application", "description": "Rental applications." },
+    "/invites/{inviteId}": { "schema": "Invite", "description": "Tenant invitations." },
+    "/tenancies/{tenancyId}": { "schema": "Tenancy", "description": "Active tenancies." },
+    "/payments/{paymentId}": { "schema": "Payment", "description": "Rent payments." },
+    "/maintenance_requests/{requestId}": { "schema": "MaintenanceRequest", "description": "Maintenance requests." }
+  }
+}

@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function getUserRole(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data.role;
+    }
+
+    // --- Validation Blueprints ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'role', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['landlord', 'tenant'] &&
+             data.email is string && data.email.size() <= 100 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidProperty(data) {
+      return data.keys().hasAll(['landlordId', 'name', 'rentAmount', 'available', 'createdAt']) &&
+             data.landlordId == request.auth.uid &&
+             data.name is string && data.name.size() <= 100 &&
+             data.rentAmount is number && data.rentAmount > 0 &&
+             data.available is bool &&
+             data.createdAt == request.time;
+    }
+
+    function isValidApplication(data) {
+      return data.keys().hasAll(['tenantId', 'propertyId', 'landlordId', 'status', 'createdAt']) &&
+             data.tenantId == request.auth.uid &&
+             data.status == 'pending' &&
+             data.createdAt == request.time;
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['landlordId', 'propertyId', 'tenantEmail', 'rentAmount', 'rentDueDate', 'status', 'createdAt']) &&
+             data.landlordId == request.auth.uid &&
+             data.propertyId is string &&
+             data.tenantEmail is string && data.tenantEmail.size() <= 100 &&
+             data.rentAmount is number && data.rentAmount > 0 &&
+             data.rentDueDate is number &&
+             data.status == 'pending' &&
+             data.createdAt == request.time;
+    }
+
+    function isValidTenancy(data) {
+      // Required keys: tenantId, propertyId, landlordId, unitNumber, startDate, rentAmount, rentDueDate, rentStatus, createdAt
+      return data.keys().hasAll(['tenantId', 'propertyId', 'landlordId', 'startDate', 'rentAmount', 'rentDueDate', 'rentStatus', 'createdAt']) &&
+             (data.landlordId == request.auth.uid || data.tenantId == request.auth.uid) &&
+             data.tenantId is string && data.tenantId.size() > 0 &&
+             data.propertyId is string && data.propertyId.size() > 0 &&
+             data.landlordId is string && data.landlordId.size() > 0 &&
+             data.rentAmount is number && data.rentAmount > 0 &&
+             data.rentDueDate is number && data.rentDueDate >= 1 && data.rentDueDate <= 31 &&
+             data.rentStatus in ['current', 'overdue'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidPayment(data) {
+      return data.keys().hasAll(['tenantId', 'landlordId', 'propertyId', 'tenancyId', 'amount', 'transactionCode', 'date', 'status', 'aiVerified', 'method', 'aiMetadata']) &&
+             data.tenantId == request.auth.uid &&
+             data.landlordId is string &&
+             data.propertyId is string &&
+             data.tenancyId is string &&
+             data.amount is number && data.amount > 0 &&
+             data.transactionCode is string && data.transactionCode.size() <= 50 &&
+             data.status in ['pending', 'completed', 'flagged'] &&
+             data.date == request.time;
+    }
+
+    // --- Rules ---
+
+    // Users
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.uid == request.auth.uid; // Secure list query
+      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
+      allow update: if isSignedIn() && isOwner(userId) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'phoneNumber', 'employmentDetails', 'updatedAt']) &&
+                    incoming().updatedAt == request.time;
+    }
+
+    // Properties
+    match /properties/{propertyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && getUserRole(request.auth.uid) == 'landlord' && isValidProperty(incoming()) && isValidId(propertyId);
+      allow update: if isSignedIn() && isOwner(existing().landlordId) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'rentAmount', 'description', 'images', 'amenities', 'available', 'updatedAt']) &&
+                    incoming().updatedAt == request.time;
+      allow delete: if isSignedIn() && isOwner(existing().landlordId);
+    }
+
+    // Applications
+    match /applications/{applicationId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.tenantId) || isOwner(resource.data.landlordId));
+      allow list: if isSignedIn() && (resource.data.tenantId == request.auth.uid || resource.data.landlordId == request.auth.uid);
+      allow create: if isSignedIn() && getUserRole(request.auth.uid) == 'tenant' && isValidApplication(incoming()) && isValidId(applicationId);
+      allow update: if isSignedIn() && (
+        // Tenant can cancel (if still pending)
+        (isOwner(existing().tenantId) && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && incoming().status == 'cancelled') ||
+        // Landlord can approve/reject
+        (isOwner(existing().landlordId) && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && incoming().status in ['approved', 'rejected'])
+      );
+    }
+
+    // Invitations
+    match /invites/{inviteId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.landlordId) || request.auth.token.email == resource.data.tenantEmail);
+      allow list: if isSignedIn() && (resource.data.landlordId == request.auth.uid || resource.data.tenantEmail == request.auth.token.email);
+      allow create: if isSignedIn() && getUserRole(request.auth.uid) == 'landlord' && isValidInvite(incoming());
+      allow update: if isSignedIn() && (
+        // Tenant can accept/decline
+        (request.auth.token.email == existing().tenantEmail && existing().status == 'pending' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['status']) && 
+         incoming().status in ['accepted', 'declined']) ||
+        // Landlord can cancel
+        (isOwner(existing().landlordId) && existing().status == 'pending' && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['status']) && 
+         incoming().status == 'cancelled')
+      );
+    }
+
+    // Tenancies
+    match /tenancies/{tenancyId} {
+      allow get: if isSignedIn() && (resource.data.tenantId == request.auth.uid || resource.data.landlordId == request.auth.uid);
+      allow list: if isSignedIn() && (resource.data.tenantId == request.auth.uid || resource.data.landlordId == request.auth.uid);
+      allow create: if isSignedIn() && isValidTenancy(incoming());
+      allow update: if isSignedIn() && (
+        // Landlord can update status/due date
+        (resource.data.landlordId == request.auth.uid && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['rentStatus', 'rentDueDate', 'updatedAt']) &&
+         incoming().updatedAt == request.time) ||
+        // Tenant can update nothing (demo placeholder or specific fields if needed)
+        false
+      );
+    }
+
+    // Payments
+    match /payments/{paymentId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.tenantId) || isOwner(resource.data.landlordId));
+      allow list: if isSignedIn() && (resource.data.tenantId == request.auth.uid || resource.data.landlordId == request.auth.uid);
+      allow create: if isSignedIn() && isValidPayment(incoming());
+    }
+
+    // Maintenance Requests
+    match /maintenance_requests/{requestId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.tenantId) || isOwner(resource.data.landlordId));
+      allow list: if isSignedIn() && (resource.data.tenantId == request.auth.uid || resource.data.landlordId == request.auth.uid);
+      allow create: if isSignedIn() && isOwner(incoming().tenantId);
+      allow update: if isSignedIn() && (
+        (isOwner(existing().tenantId) && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'urgency'])) ||
+        (isOwner(existing().landlordId) && incoming().diff(existing()).affectedKeys().hasOnly(['status']))
+      );
+    }
+  }
+}
