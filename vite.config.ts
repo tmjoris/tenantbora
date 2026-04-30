@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
-    envPrefix: ['VITE_', 'FIREBASE_'],
+    envPrefix: ['VITE_', 'FIREBASE_', 'GEMINI_'],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
